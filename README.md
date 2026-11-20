@@ -3,15 +3,17 @@
 L'app dei clienti della bottega La Spesa Sfusa (Via Lazio 66, Montegranaro): tessera punti, barattolo, missioni e buono.
 È una pagina web come Magazzino e Lavoro: si apre dal link e si aggiunge alla schermata del telefono.
 
-## Versione 0.2.0 – passo 1: solo punti e premio, dati finti
+## Versione 0.3.0 – passo 2: collegata a Firebase e al Magazzino
 
-- Iscrizione con 20 punti, codice di un'amica, «Ho già la tessera».
+- La tessera vera sta su Firebase in `clienti/{codice}`: l'app la crea all'iscrizione (una volta, senza punti) e la rilegge all'avvio, quando torna davanti e ogni minuto. Le spese le scrive il Magazzino (dalla 1.34.0) in `clienti/{codice}/spese/{id}` quando al Banco si scansiona la tessera e si chiude la spesa.
+- Iscrizione con 20 punti, codice di un'amica (20 punti a lei e 30 a chi l'ha invitata alla prima spesa, li scrive il Magazzino), «Ho già la tessera» (cerca la scheda su Firebase).
 - Tessera con QR e codice a barre (Code 128), stampabile in formato carta di credito.
 - Barattolo verso i 200 punti, avviso dal 25 del mese, buono da 5 € su una spesa di almeno 40 €.
-- Missioni del mese: prodotto della settimana (+20), pane della settimana (+20), dolce del mese (+10); «Porta un'amica» (+30 a chi invita, +20 all'amica).
-- **Versione di prova:** tutto resta sul telefono, niente arriva al negozio. Dalla barra blu in alto si caricano i tre clienti della scheda per Anita, si cambia il giorno e si aggiunge una spesa d'esempio.
+- Missioni del mese: prodotto della settimana (+20), pane della settimana (+20), dolce del mese (+10).
+- Barra blu «apri la prova»: la tessera di questo telefono, i tre clienti di prova della scheda per Anita (dati finti, non toccano Firebase), il giorno della prova.
+- Regole di Firestore: `firestore.rules` (si incollano nella console di Firebase). Senza password si legge solo la scheda di una tessera conoscendone il codice; il magazzino resta solo del negozio.
 
-Fuori da questa versione: collegamento a Firebase (passo 2), aggiunte al Magazzino (passo 3), notifiche (passo 4), vetrina «Salvali tu», notizie e acquisti in app.
+Fuori da questa versione: notifiche (passo 4), vetrina «Salvali tu», notizie e acquisti in app.
 
 ## Le regole dei punti (approvate da Matteo il 17 e il 19/11/2026)
 
@@ -38,6 +40,7 @@ Il calcolo sta tutto in `punti.js`, che dal passo 3 userà anche il Magazzino.
 | `fonts/` | caratteri Zilla Slab, IBM Plex Sans e Mono, Caveat (licenza SIL OFL 1.1, testi nella cartella) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | app sulla schermata e funzionamento senza internet |
 | `prove/punti.test.js` | prove automatiche del calcolo |
+| `firestore.rules` | regole di Firestore (copia di quelle della console) |
 
 ## Prove
 

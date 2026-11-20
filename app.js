@@ -1,18 +1,49 @@
-/* La Spesa Sfusa per te – app dei clienti, versione 0.2.0 (passo 1: solo punti e premio, dati finti).
-   Nella versione di prova tutto resta su questo telefono: il collegamento a Firebase arriva con il passo 2. */
+/* La Spesa Sfusa per te – app dei clienti, versione 0.3.0 (passo 2: collegata a Firebase, solo punti e premio).
+   La tessera vera sta su Firebase in clienti/{codice}: il cliente la crea all'iscrizione e la legge; le spese le scrive il Magazzino.
+   I clienti di prova (dati finti) restano nel pannello di prova e non toccano Firebase. */
 'use strict';
-const VERSIONE = '0.2.0';
+const VERSIONE = '0.3.0';
 const R = Punti.REGOLE;
 const CHIAVE = 'lss-per-te';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/* ---------- dati ---------- */
+/* ---------- Firebase (dati pubblici del progetto: a proteggere le schede sono le regole di Firestore) ---------- */
+const FB = Object.assign({ apiKey: 'AIzaSyBj_vigsG7m3jQg3MaRSBTwoKkXcPB3HKk', projectId: 'magazzino-spesa-sfusa-69c90', firestoreUrl: 'https://firestore.googleapis.com/v1' },
+  (() => { try { return JSON.parse(localStorage.getItem('lss-per-te-firebase')) || {}; } catch (e) { return {}; } })());   // solo per le prove con un Firestore finto
+const percorsoFs = p => `${FB.firestoreUrl}/projects/${FB.projectId}/databases/(default)/documents${p}${p.includes('?') ? '&' : '?'}key=${encodeURIComponent(FB.apiKey)}`;
+async function chiamaFs(p, { method = 'GET', body = null } = {}) {
+  const r = await fetch(percorsoFs(p), { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 404 && method === 'GET') return null;
+  const j = await r.json().catch(() => null);
+  if (!r.ok) { const e = new Error((j && j.error && j.error.message) || 'Errore ' + r.status); e.stato = r.status; throw e; }
+  return j;
+}
+const fsVal = v => v === null || v === undefined ? { nullValue: null } : typeof v === 'boolean' ? { booleanValue: v } : typeof v === 'number' ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v })
+  : typeof v === 'string' ? { stringValue: v } : Array.isArray(v) ? { arrayValue: { values: v.map(fsVal) } } : { mapValue: { fields: fsObj(v) } };
+const fsObj = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => [k, fsVal(v)]));
+const daFsVal = x => !x ? null : 'nullValue' in x ? null : 'booleanValue' in x ? x.booleanValue : 'integerValue' in x ? Number(x.integerValue) : 'doubleValue' in x ? x.doubleValue
+  : 'stringValue' in x ? x.stringValue : 'timestampValue' in x ? x.timestampValue : 'arrayValue' in x ? (x.arrayValue.values || []).map(daFsVal) : 'mapValue' in x ? daFsObj(x.mapValue.fields) : null;
+const daFsObj = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [k, daFsVal(v)]));
+/* la scheda di una tessera, con le sue spese; null se la tessera non c'è */
+async function leggiScheda(codice) {
+  const d = await chiamaFs('/clienti/' + codice);
+  if (!d) return null;
+  const lista = ((await chiamaFs('/clienti/' + codice + '/spese?pageSize=300')) || {}).documents || [];
+  const s = daFsObj(d.fields);
+  return { codice, codiceAmica: s.codiceAmica || null, iscrittoIl: s.iscrittoIl || null, invitatoDa: s.invitatoDa || null, amiche: s.amiche || [],
+    spese: lista.map(x => daFsObj(x.fields)).filter(x => x && x.data && Array.isArray(x.righe)) };
+}
+
+/* ---------- dati sul telefono ----------
+   mio: la tessera di questo telefono (con l'ultima copia della scheda letta da Firebase)
+   scenario: un cliente di prova, con dati finti, che non tocca Firebase */
 let stato = carica();
 function carica() {
-  try { const s = JSON.parse(localStorage.getItem(CHIAVE)); if (s && s.versione === 1) return s; } catch (e) { /* niente */ }
-  return { versione: 1, scenario: null, oggiProva: null, cliente: null };
+  try { const s = JSON.parse(localStorage.getItem(CHIAVE)); if (s && s.versione === 2) return s; } catch (e) { /* niente */ }
+  return { versione: 2, mio: null, scenario: null, scenarioDati: null, oggiProva: null };
 }
+const clienteAttivo = () => stato.scenario ? stato.scenarioDati : stato.mio;
 function salva() { try { localStorage.setItem(CHIAVE, JSON.stringify(stato)); } catch (e) { /* senza memoria si lavora lo stesso */ } }
 const oggiVero = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const oggi = () => stato.oggiProva || oggiVero();
@@ -78,7 +109,7 @@ function testata(m) {
   <a class="tondo" href="#tessera" aria-label="Mostra la tessera">${icona('tessera')}</a></div></div>`;
 }
 const situazione = () => {
-  const c = stato.cliente, o = oggi();
+  const c = clienteAttivo(), o = oggi();
   return { c, o, m: Punti.mese(c, o), b: Punti.buoni(c, o) };
 };
 function avvisino(testo) {
@@ -107,7 +138,7 @@ const VISTE = {
     return `<main tabindex="-1">
       <div class="testata"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div><a class="tondo chiaro" href="#benvenuto" aria-label="Torna indietro">×</a></div>
       <h1 class="titolo">Il codice di un’amica</h1>
-      <div class="sotto">Con il suo codice ricevi ${R.amicaInvitata} punti in più, oltre ai ${R.iscrizione} di benvenuto. Lei ne riceve ${R.amicaChiInvita} quando fai la prima spesa.</div>
+      <div class="sotto">Con il suo codice, alla tua prima spesa ricevi ${R.amicaInvitata} punti in più, oltre ai ${R.iscrizione} di benvenuto, e lei ne riceve ${R.amicaChiInvita}.</div>
       <form data-form="amica" class="carta pannello" novalidate>
         <label class="campo">Codice dell’amica<input name="codice" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AMI…" required></label>
         <div class="errore" role="alert" hidden></div>
@@ -118,7 +149,7 @@ const VISTE = {
   recupero() {
     const scan = 'BarcodeDetector' in window;
     return `<main tabindex="-1">
-      <div class="testata"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div><a class="tondo chiaro" href="${stato.cliente ? '#per-te' : '#benvenuto'}" aria-label="Torna indietro">×</a></div>
+      <div class="testata"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div><a class="tondo chiaro" href="${clienteAttivo() ? '#per-te' : '#benvenuto'}" aria-label="Torna indietro">×</a></div>
       <h1 class="titolo">Ho già la tessera</h1>
       <div class="sotto">Scrivi il codice sotto il codice a barre della tua tessera stampata: ritrovi i tuoi punti anche su un telefono nuovo.</div>
       <form data-form="recupero" class="carta pannello" novalidate>
@@ -127,7 +158,7 @@ const VISTE = {
         <button class="pulsante" type="submit">Ritrova i miei punti</button>
         ${scan ? `<button class="pulsante secondario" type="button" data-az="scansiona">${icona('tessera', '#2F241E')} Inquadra la tessera</button>` : ''}
       </form>
-      <div class="nota">Versione di prova: funzionano le tessere dei clienti di prova (per esempio LSS FAM2 9QX4) e quella creata su questo telefono.</div>
+      <div class="nota">Funzionano anche le tessere dei clienti di prova (per esempio LSS FAM2 9QX4), con dati finti.</div>
       </main>`;
   },
 
@@ -139,6 +170,7 @@ const VISTE = {
     const restano = m.missioni.filter(x => !x.completa).reduce((s, x) => s + x.punti, 0);
     const movimenti = [...m.movimenti].reverse().map(mv => `<div class="mov"><span class="q">${dataBreve(mv.data)}</span><span class="d">${esc(mv.titolo)}${mv.tipo === 'spesa' ? `<small>${euro(mv.totaleCent)}${mv.dettaglio.tolti ? ` · −${mv.dettaglio.tolti} punti per il buono` : ''}</small><div class="dettaglio-spesa">${mv.dettaglio.righe.map(r => `<div><span>${esc(r.nome)}</span><span>${euro(r.importoCent)} × ${r.puntiPerEuro}</span></div>`).join('')}</div>` : ''}</span><span class="p">+${mv.punti}</span></div>`).join('');
     return `<main tabindex="-1">${testata(m)}
+      ${stato.scenario ? `<a class="avviso" href="#prova" style="text-decoration:none;color:inherit"><div><b>Cliente di prova</b><p>Dati finti${stato.mio ? ': tocca qui per tornare alla tua tessera' : ''}.</p></div></a>` : ''}
       ${daUsare.length ? `<a class="buono-pronto" href="#buono"><span class="riquadro" style="background:var(--cotto)">${icona('buono')}</span><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span class="etichetta" style="color:var(--cotto)">${daUsare.length > 1 ? `Hai ${daUsare.length} buoni` : 'Hai un buono'}</span><span class="grande">5 € di sconto sulla spesa</span><span class="piccolo">Da ${euro(R.spesaMinimaBuonoCent).replace(',00', '')} in su · entro il ${dataLunga(daUsare[0].scade)}</span></span>${icona('freccia', '#B4502A')}</a>` : ''}
       ${m.avviso && m.mancano > 0 ? `<div class="avviso" role="status"><span class="riquadro" style="background:var(--ambra)">${icona('campana')}</span><div><b>Ti mancano ${punti(m.mancano)}</b><p>Hai tempo fino al ${dataLunga(m.fineMese)}: il 1° del mese il barattolo riparte da zero.</p></div></div>` : ''}
       <section class="carta barattolo" aria-label="Il tuo barattolo">
@@ -160,6 +192,7 @@ const VISTE = {
       <a class="vai-missioni" href="#missioni"><span class="t"><b>Missioni di ${nomeMese(m.oggi)}</b><span>${fatte === 1 ? '1 fatta' : `${fatte} fatte`} · ${m.missioni.length - fatte} in corso${restano ? ` · fino a ${restano} punti in più` : ''}</span></span>${icona('freccia')}</a>
       <details class="carta movimenti"><summary>I tuoi punti di ${nomeMese(m.oggi)}</summary>${movimenti || '<div class="mov"><span class="d">Ancora niente questo mese.</span></div>'}</details>
       <div class="nota">Danno punti solo le spese al banco con la tessera, su quanto paghi davvero: nella spesa con il buono si tolgono 5 punti.</div>
+      ${statoLettura()}
     </main>`;
   },
 
@@ -202,7 +235,7 @@ const VISTE = {
         <div class="qr">${Codici.svgQR(c.codice)}</div>
         <div class="barre">${Codici.svg128(c.codice)}</div>
         <div class="codice">${esc(Codici.leggibile(c.codice))}</div>
-        <div class="nota" style="font-size:11px">tessera di prova</div>
+        ${stato.scenario ? '<div class="nota" style="font-size:11px">tessera di prova</div>' : ''}
       </section>
       <div class="due"><button class="pulsante secondario" data-az="stampa">${icona('stampa')} Stampala</button><button class="pulsante secondario" data-az="schermata">${icona('telefono')} Sulla schermata</button></div>
       <div class="nota" style="text-align:center">Se cambi telefono, con la tessera stampata non perdi i punti: in «Ho già la tessera» scrivi il codice.</div>
@@ -238,17 +271,19 @@ const VISTE = {
   prova() {
     const sc = Prova.SCENARI.map(s => `<button class="scenario" data-scenario="${s.id}" aria-pressed="${stato.scenario === s.id}"><b>${esc(s.nome)} · ${dataLunga(s.oggi)}</b><span>${esc(s.descrizione)}</span></button>`).join('');
     return `<main tabindex="-1">
-      <div class="testata"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div>${stato.cliente ? '<a class="tondo chiaro" href="#per-te" aria-label="Chiudi">×</a>' : ''}</div>
-      <div><h1 class="titolo">Prova dell’app</h1><div class="sotto">Versione ${VERSIONE} con dati finti: tutto resta su questo telefono e non arriva al negozio. Nella versione vera i punti li scrive il Magazzino quando in cassa si scansiona la tessera.</div></div>
-      <section class="carta pannello"><h2>Clienti di prova</h2>${sc}
-        <button class="scenario" data-az="nuovo"><b>Cliente nuovo</b><span>Si parte dal benvenuto, con i 20 punti dell’iscrizione</span></button></section>
+      <div class="testata"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div>${clienteAttivo() ? '<a class="tondo chiaro" href="#per-te" aria-label="Chiudi">×</a>' : ''}</div>
+      <div><h1 class="titolo">Prova dell’app</h1><div class="sotto">Versione ${VERSIONE}. La tessera di questo telefono è vera: i punti li scrive il Magazzino quando al Banco si scansiona la tessera. I clienti di prova hanno dati finti e restano su questo telefono.</div></div>
+      <section class="carta pannello"><h2>La tessera di questo telefono</h2>
+        ${stato.mio ? `<button class="scenario" data-az="mia" aria-pressed="${!stato.scenario}"><b>${esc(Codici.leggibile(stato.mio.codice))}</b><span>${stato.mio.inviata ? 'Su Firebase' : 'Non ancora su Firebase: parte appena c’è internet'}${stato.mio.aggiornato ? ' · letta alle ' + oraBreve(stato.mio.aggiornato) : ''}</span></button>` : '<div class="nota">Nessuna: si crea dal benvenuto con «Prendi il barattolo».</div>'}
+        <button class="scenario" data-az="nuovo"><b>Cliente nuovo</b><span>Si riparte dal benvenuto, con una tessera nuova</span></button></section>
+      <section class="carta pannello"><h2>Clienti di prova (dati finti)</h2>${sc}</section>
       <section class="carta pannello"><h2>Giorno</h2>
         <label class="data">Oggi, per la prova<input type="date" data-campo="oggi" value="${oggi()}"></label>
         <button class="pulsante secondario" data-az="oggi-vero">Torna alla data di oggi</button>
         <div class="nota">Dal 25 compare l’avviso «ti mancano…». Il 1° del mese punti e missioni ripartono da zero.</div></section>
       <section class="carta pannello"><h2>Spesa di prova</h2>
-        <button class="pulsante secondario" data-az="spesa" ${stato.cliente ? '' : 'disabled'}>Aggiungi una spesa (pasta, yogurt «Salvali tu», pane)</button>
-        <div class="nota">È l’esempio del riepilogo: 21,70 € di spesa, 49 punti.</div></section>
+        <button class="pulsante secondario" data-az="spesa" ${stato.scenario ? '' : 'disabled'}>Aggiungi una spesa (pasta, yogurt «Salvali tu», pane)</button>
+        <div class="nota">Solo per i clienti di prova: è l’esempio del riepilogo, 21,70 € di spesa, 49 punti. Sulla tessera vera le spese le scrive il Magazzino.</div></section>
       <button class="pulsante leggero" data-az="cancella">Cancella tutto e ricomincia</button>
     </main>`;
   }
@@ -257,21 +292,23 @@ const VISTE = {
 /* ---------- navigazione ---------- */
 const CON_CLIENTE = ['per-te', 'missioni', 'tessera', 'buono'];
 function vista() {
-  let v = location.hash.slice(1) || (stato.cliente ? 'per-te' : 'benvenuto');
-  if (!VISTE[v]) v = stato.cliente ? 'per-te' : 'benvenuto';
-  if (CON_CLIENTE.includes(v) && !stato.cliente) v = 'benvenuto';
-  if (v === 'benvenuto' && stato.cliente) v = 'per-te';
+  const c = clienteAttivo();
+  let v = location.hash.slice(1) || (c ? 'per-te' : 'benvenuto');
+  if (!VISTE[v]) v = c ? 'per-te' : 'benvenuto';
+  if (CON_CLIENTE.includes(v) && !c) v = 'benvenuto';
+  if (v === 'benvenuto' && c) v = 'per-te';
   return v;
 }
 function disegna(cambioPagina = true) {
   const v = vista();
   $('#vista').innerHTML = VISTE[v]();
   const tab = { 'per-te': 'per-te', buono: 'per-te', missioni: 'missioni', tessera: 'tessera' }[v];
-  $('#tabbar').hidden = !stato.cliente || !tab;
+  $('#tabbar').hidden = !clienteAttivo() || !tab;
   document.querySelectorAll('#tabbar a').forEach(a => { if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   document.title = { benvenuto: 'Benvenuto', amica: 'Codice di un’amica', recupero: 'Ho già la tessera', 'per-te': 'Il tuo barattolo', missioni: 'Missioni', tessera: 'La tua tessera', buono: 'I tuoi buoni', prova: 'Prova' }[v] + ' – La Spesa Sfusa per te';
-  if (stato.cliente) {
-    $('#stampa').innerHTML = [0, 1].map(() => `<div class="tessera-stampa"><div class="qr">${Codici.svgQR(stato.cliente.codice, { lato: 3 })}</div><div class="dx"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div><div class="barre">${Codici.svg128(stato.cliente.codice)}</div><div class="codice">${esc(Codici.leggibile(stato.cliente.codice))}</div><small>Falla vedere in cassa, prima di pagare. Via Lazio 66, Montegranaro</small></div></div>`).join('');
+  const ca = clienteAttivo();
+  if (ca) {
+    $('#stampa').innerHTML = [0, 1].map(() => `<div class="tessera-stampa"><div class="qr">${Codici.svgQR(ca.codice, { lato: 3 })}</div><div class="dx"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div><div class="barre">${Codici.svg128(ca.codice)}</div><div class="codice">${esc(Codici.leggibile(ca.codice))}</div><small>Falla vedere in cassa, prima di pagare. Via Lazio 66, Montegranaro</small></div></div>`).join('');
   }
   if (cambioPagina) { window.scrollTo(0, 0); const main = $('#vista main'); if (main) main.focus({ preventScroll: true }); }
 }
@@ -279,23 +316,58 @@ window.addEventListener('hashchange', () => disegna());
 
 /* ---------- azioni ---------- */
 function nuovoCliente(amica) {
-  const o = oggi();
-  stato.cliente = { codice: Codici.nuovoCodice(), codiceAmica: Codici.nuovoCodiceAmica(), iscrittoIl: o, amiche: amica ? [{ data: o, ruolo: 'invitata', codice: amica }] : [], spese: [] };
-  stato.scenario = null; salva();
+  stato.mio = { codice: Codici.nuovoCodice(), codiceAmica: Codici.nuovoCodiceAmica(), iscrittoIl: oggiVero(), invitatoDa: amica || null, amiche: [], spese: [], inviata: false, aggiornato: null };
+  stato.scenario = null; stato.scenarioDati = null; stato.oggiProva = null; salva();
   location.hash = '#per-te'; disegna();
-  avvisino(`Ti diamo il benvenuto: ${amica ? R.iscrizione + R.amicaInvitata : R.iscrizione} punti nel barattolo`);
+  avvisino(`Ti diamo il benvenuto: ${R.iscrizione} punti nel barattolo`);
+  aggiorna();
 }
 function caricaScenario(id) {
   const s = Prova.SCENARI.find(x => x.id === id);
-  stato.cliente = s.cliente(); stato.scenario = id; stato.oggiProva = s.oggi; salva();
+  stato.scenarioDati = s.cliente(); stato.scenario = id; stato.oggiProva = s.oggi; salva();
 }
-function trovaTessera(testo) {
+/* l'iscrizione su Firebase: una volta sola, senza punti (i punti li scrive solo il Magazzino) */
+async function inviaIscrizione() {
+  const m = stato.mio;
+  try {
+    await chiamaFs('/clienti?documentId=' + m.codice, { method: 'POST', body: { fields: fsObj({ iscrittoIl: m.iscrittoIl, codiceAmica: m.codiceAmica, invitatoDa: m.invitatoDa || null }) } });
+  } catch (e) { if (e.stato !== 409) throw e; }   // 409: c'è già (per esempio creata dal negozio)
+  if (stato.mio && stato.mio.codice === m.codice) { stato.mio.inviata = true; salva(); }
+}
+/* rilegge la scheda: all'avvio, quando l'app torna davanti e ogni minuto */
+let aggiornando = false;
+async function aggiorna() {
+  if (aggiornando || !stato.mio) return;
+  aggiornando = true;
+  try {
+    if (!stato.mio.inviata) await inviaIscrizione();
+    const s = await leggiScheda(stato.mio.codice);
+    if (s && stato.mio && stato.mio.codice === s.codice) {
+      Object.assign(stato.mio, { codiceAmica: s.codiceAmica || stato.mio.codiceAmica, iscrittoIl: s.iscrittoIl || stato.mio.iscrittoIl, invitatoDa: s.invitatoDa, amiche: s.amiche, spese: s.spese, aggiornato: Date.now(), errore: null });
+      salva();
+      if (!stato.scenario && !(document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName))) disegna(false);
+    }
+  } catch (e) { if (stato.mio) { stato.mio.errore = Date.now(); salva(); } }
+  finally { aggiornando = false; }
+}
+const oraBreve = t => { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+function statoLettura() {
+  if (stato.scenario || !stato.mio) return '';
+  const m = stato.mio;
+  const t = !m.inviata ? 'Tessera non ancora arrivata al negozio: parte appena c’è internet.' : m.aggiornato ? `Punti aggiornati alle ${oraBreve(m.aggiornato)}.` : 'Leggo i tuoi punti…';
+  return `<div class="nota">${t}${m.errore && m.aggiornato ? ' Senza internet: sono gli ultimi letti.' : ''} <button class="pulsante leggero" style="display:inline;width:auto;min-height:44px;padding:0 4px" data-az="aggiorna">Aggiorna</button></div>`;
+}
+async function trovaTessera(testo) {
   const cod = Codici.pulisci(testo);
   if (!Codici.valido(cod)) return { errore: 'Il codice ha questa forma: LSS e 8 tra lettere e numeri.' };
   const s = Prova.SCENARI.find(x => x.cliente().codice === cod);
   if (s) { caricaScenario(s.id); return { ok: true }; }
-  if (stato.cliente && stato.cliente.codice === cod) return { ok: true };
-  return { errore: 'Non trovo questa tessera. Controlla il codice.' };
+  if (stato.mio && stato.mio.codice === cod) { stato.scenario = null; salva(); aggiorna(); return { ok: true }; }
+  let sch;
+  try { sch = await leggiScheda(cod); } catch (e) { return { errore: 'Serve internet per ritrovare la tessera.' }; }
+  if (!sch) return { errore: 'Non trovo questa tessera. Controlla il codice.' };
+  stato.mio = { ...sch, inviata: true, aggiornato: Date.now() }; stato.scenario = null; stato.scenarioDati = null; stato.oggiProva = null; salva();
+  return { ok: true };
 }
 
 document.addEventListener('click', async e => {
@@ -304,23 +376,28 @@ document.addEventListener('click', async e => {
   const az = el.dataset.az;
   if (el.dataset.scenario) { caricaScenario(el.dataset.scenario); location.hash = '#per-te'; disegna(); avvisino('Cliente di prova caricato'); return; }
   if (az === 'iscriviti') nuovoCliente(null);
-  else if (az === 'nuovo') { stato.cliente = null; stato.scenario = null; stato.oggiProva = null; salva(); location.hash = '#benvenuto'; disegna(); }
+  else if (az === 'mia') { stato.scenario = null; stato.scenarioDati = null; stato.oggiProva = null; salva(); location.hash = '#per-te'; disegna(); aggiorna(); }
+  else if (az === 'aggiorna') { aggiorna().then(() => avvisino(stato.mio && !stato.mio.errore ? 'Punti aggiornati' : 'Senza internet: riprova più tardi')); }
+  else if (az === 'nuovo') {
+    if (stato.mio && !confirm(`La tessera ${Codici.leggibile(stato.mio.codice)} resta al negozio: per riaprirla serve il suo codice («Ho già la tessera»). Continuo con una tessera nuova?`)) return;
+    stato.mio = null; stato.scenario = null; stato.scenarioDati = null; stato.oggiProva = null; salva(); location.hash = '#benvenuto'; disegna();
+  }
   else if (az === 'oggi-vero') { stato.oggiProva = null; salva(); disegna(false); avvisino('Data di oggi'); }
-  else if (az === 'spesa') { stato.cliente.spese.push(Prova.spesaEsempio(oggi())); salva(); location.hash = '#per-te'; disegna(); avvisino('+49 punti dalla spesa di prova'); }
+  else if (az === 'spesa') { if (!stato.scenario) return; stato.scenarioDati.spese.push(Prova.spesaEsempio(oggi())); salva(); location.hash = '#per-te'; disegna(); avvisino('+49 punti dalla spesa di prova'); }
   else if (az === 'cancella') { if (confirm('Cancellare i dati di prova su questo telefono?')) { try { localStorage.removeItem(CHIAVE); } catch (x) { /* niente */ } stato = carica(); location.hash = '#benvenuto'; disegna(); } }
   else if (az === 'stampa') window.print();
   else if (az === 'schermata') schermata();
   else if (az === 'condividi') {
-    const testo = `Ti invito a La Spesa Sfusa per te: con il mio codice ${stato.cliente.codiceAmica} ricevi ${R.amicaInvitata} punti in più. ${location.origin + location.pathname}`;
+    const testo = `Ti invito a La Spesa Sfusa per te: con il mio codice ${clienteAttivo().codiceAmica} alla tua prima spesa ricevi ${R.amicaInvitata} punti in più. ${location.origin + location.pathname}`;
     try { if (navigator.share) await navigator.share({ title: 'La Spesa Sfusa per te', text: testo }); else { await navigator.clipboard.writeText(testo); avvisino('Messaggio copiato: incollalo dove vuoi'); } }
-    catch (x) { if (x && x.name !== 'AbortError') avvisino('Il tuo codice è ' + stato.cliente.codiceAmica); }
+    catch (x) { if (x && x.name !== 'AbortError') avvisino('Il tuo codice è ' + clienteAttivo().codiceAmica); }
   }
   else if (az === 'scansiona') scansiona();
 });
 document.addEventListener('change', e => {
   if (e.target.dataset.campo === 'oggi' && e.target.value) { stato.oggiProva = e.target.value; salva(); avvisino('Oggi, per la prova: ' + dataLunga(e.target.value)); }
 });
-document.addEventListener('submit', e => {
+document.addEventListener('submit', async e => {
   const f = e.target; e.preventDefault();
   const err = $('.errore', f); const val = f.codice.value;
   if (f.dataset.form === 'amica') {
@@ -328,7 +405,9 @@ document.addEventListener('submit', e => {
     if (!/^AMI[A-Z0-9]{5}$/.test(cod)) { err.textContent = 'Il codice amica ha questa forma: AMI e 5 tra lettere e numeri.'; err.hidden = false; return; }
     nuovoCliente(cod);
   } else if (f.dataset.form === 'recupero') {
-    const r = trovaTessera(val);
+    const bt = f.querySelector('button[type=submit]'); bt.disabled = true;
+    const r = await trovaTessera(val);
+    bt.disabled = false;
     if (r.errore) { err.textContent = r.errore; err.hidden = false; return; }
     location.hash = '#per-te'; disegna(); avvisino('Ecco di nuovo i tuoi punti');
   }
@@ -362,7 +441,7 @@ async function scansiona() {
     while (d.open) {
       const trovati = await rilevatore.detect(v).catch(() => []);
       const t = trovati.map(x => Codici.pulisci(x.rawValue)).find(Codici.valido);
-      if (t) { d.close(); const r = trovaTessera(t); if (r.errore) avvisino(r.errore); else { location.hash = '#per-te'; disegna(); avvisino('Ecco di nuovo i tuoi punti'); } break; }
+      if (t) { d.close(); const r = await trovaTessera(t); if (r.errore) avvisino(r.errore); else { location.hash = '#per-te'; disegna(); avvisino('Ecco di nuovo i tuoi punti'); } break; }
       await new Promise(r => setTimeout(r, 250));
     }
   } catch (x) { avvisino('Non riesco ad aprire la fotocamera: scrivi il codice.'); if (d.open) d.close(); }
@@ -372,6 +451,9 @@ async function scansiona() {
 /* ---------- avvio ---------- */
 $('#versione').textContent = VERSIONE;
 disegna(false);
+aggiorna();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) aggiorna(); });
+setInterval(() => { if (!document.hidden) aggiorna(); }, 60000);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').catch(() => null);
 }

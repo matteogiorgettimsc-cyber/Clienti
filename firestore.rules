@@ -1,0 +1,33 @@
+rules_version = '2';
+// Regole di Firestore del progetto magazzino-spesa-sfusa-69c90 (Magazzino, Foglio Google, Lavoro e app clienti).
+// Si incollano nella console di Firebase: Firestore Database → Regole → Pubblica.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // IL NEGOZIO: chi entra con l'email del negozio legge e scrive tutto, come prima.
+    // (Questa parte deve restare identica a quella delle regole di prima.)
+    match /{document=**} {
+      allow read, write: if request.auth != null && request.auth.token.email == 'laspesasfusa@gmail.com';
+    }
+
+    // I CLIENTI (app «La Spesa Sfusa per te»): senza password si vede solo la scheda di una tessera,
+    // conoscendone il codice. Niente elenchi delle tessere, niente magazzino.
+    match /clienti/{codice} {
+      allow get: if codice.matches('LSS[A-Z0-9]{8}');
+      // l'iscrizione: una volta sola, senza punti (le spese e i punti li scrive solo il negozio)
+      allow create: if codice.matches('LSS[A-Z0-9]{8}')
+        && request.resource.data.keys().hasOnly(['iscrittoIl', 'codiceAmica', 'invitatoDa'])
+        && request.resource.data.iscrittoIl is string
+        && request.resource.data.iscrittoIl.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && request.resource.data.codiceAmica is string
+        && request.resource.data.codiceAmica.matches('AMI[A-Z0-9]{5}')
+        && (!('invitatoDa' in request.resource.data)
+            || (request.resource.data.invitatoDa is string && request.resource.data.invitatoDa.matches('AMI[A-Z0-9]{5}')));
+
+      // le spese della tessera (le scrive il Magazzino)
+      match /spese/{spesa} {
+        allow read: if codice.matches('LSS[A-Z0-9]{8}');
+      }
+    }
+  }
+}
