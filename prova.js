@@ -52,5 +52,18 @@
     { id: 'pane', nome: 'Cliente del pane', oggi: '2026-11-30', descrizione: 'Spese piccole: 164 punti a fine mese, niente buono', cliente: delPane }
   ];
 
-  return { SCENARI, spesaEsempio, settimanaPane, piu };
+  /* vetrina di prova (dati finti): come quella che pubblica il Magazzino in vetrina/oggi */
+  const vetrinaProva = oggi => ({
+    giorno: oggi, aggiornato: null,
+    missioni: [
+      { tipo: 'settimana', titolo: 'Il prodotto della settimana', testo: 'Prendi il prodotto della settimana in 4 settimane del mese', punti: 20, prodotti: [{ id: 'p1', nome: 'Yogurt greco 500 g', prezzoCent: 390, unita: 'pz', giorni: 12 }] },
+      { tipo: 'dolce', titolo: 'Assaggia la novità', testo: 'Prendi il dolce del mese', punti: 10, prodotti: [{ id: 'p2', nome: 'Crostata di mele', prezzoCent: 1400, unita: 'pz' }] },
+      { tipo: 'pane', titolo: 'Il pane della settimana', testo: 'Prendi il pane in 3 giorni della stessa settimana', punti: 20, prodotti: [{ id: 'p3', nome: 'Pane casereccio', prezzoCent: 350, unita: 'pz' }, { id: 'p4', nome: 'Pane integrale', prezzoCent: 380, unita: 'pz' }] }
+    ],
+    ultimi: [{ id: 'p5', nome: 'Emmental 200 g', prezzoCent: 530, unita: 'pz', giorni: 3, ppe: 4 }, { id: 'p6', nome: 'Ricotta', prezzoCent: 260, unita: 'pz', giorni: 6, ppe: 4 }],
+    salvali: [{ id: 'p7', nome: 'Kefir senza lattosio', prezzoCent: 210, unita: 'pz', giorni: 14, ppe: 3 }, { id: 'p8', nome: 'Miglio soffiato', prezzoCent: 240, unita: 'pz', giorni: 18, ppe: 3 }, { id: 'p9', nome: 'Mozzarella di bufala', prezzoCent: 395, unita: 'pz', giorni: 22, ppe: 3 }],
+    bottega: [{ id: 'p10', nome: 'Biscotti alle mandorle', prezzoCent: 1800, unita: 'kg', ppe: 2 }, { id: 'p11', nome: 'Lasagne', prezzoCent: 650, unita: 'pz', ppe: 2 }]
+  });
+
+  return { SCENARI, spesaEsempio, settimanaPane, piu, vetrinaProva };
 });

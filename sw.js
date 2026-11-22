@@ -1,5 +1,5 @@
 /* Service worker: l'app si apre anche senza internet. A ogni nuova versione cambia il nome della cache. */
-const CACHE = 'per-te-0.3.0';
+const CACHE = 'per-te-0.4.0';
 const FILES = ['./', './index.html', './styles.css', './app.js', './punti.js', './codici.js', './prova.js', './qrcode.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
   './fonts/zilla-slab-latin-600-normal.woff2', './fonts/zilla-slab-latin-700-normal.woff2', './fonts/ibm-plex-sans-latin-400-normal.woff2',

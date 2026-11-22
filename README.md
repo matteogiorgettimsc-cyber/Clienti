@@ -3,6 +3,12 @@
 L'app dei clienti della bottega La Spesa Sfusa (Via Lazio 66, Montegranaro): tessera punti, barattolo, missioni e buono.
 È una pagina web come Magazzino e Lavoro: si apre dal link e si aggiunge alla schermata del telefono.
 
+## Versione 0.4.0 – Promozioni
+
+- In «Per te», sotto il barattolo, le pubblicità a scorrimento dei prodotti che danno punti in più; in basso la nuova scheda «Promozioni»: missioni del mese con i loro prodotti (prodotto della settimana +20, dolce del mese +10, pane +20), ultimi giorni ×4, «Salvali tu» ×3, «Fatto in bottega» ×2, con il prezzo di oggi (senza prezzo barrato e senza la parola «sconto») e «fino a esaurimento».
+- La vetrina la pubblica il Magazzino (dalla 1.35.0) in `vetrina/oggi`; le foto, caricate dalla scheda prodotto del Magazzino, stanno in `vetrinaFoto/{id}` e restano sul telefono (Cache Storage) finché non cambiano.
+- In «Missioni» compaiono i prodotti di questa settimana e di questo mese. I clienti di prova hanno una vetrina di prova.
+
 ## Versione 0.3.0 – passo 2: collegata a Firebase e al Magazzino
 
 - La tessera vera sta su Firebase in `clienti/{codice}`: l'app la crea all'iscrizione (una volta, senza punti) e la rilegge all'avvio, quando torna davanti e ogni minuto. Le spese le scrive il Magazzino (dalla 1.34.0) in `clienti/{codice}/spese/{id}` quando al Banco si scansiona la tessera e si chiude la spesa.

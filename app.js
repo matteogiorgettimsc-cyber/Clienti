@@ -1,8 +1,8 @@
-/* La Spesa Sfusa per te – app dei clienti, versione 0.3.0 (passo 2: collegata a Firebase, solo punti e premio).
+/* La Spesa Sfusa per te – app dei clienti, versione 0.4.0 (collegata a Firebase; punti, premio e Promozioni).
    La tessera vera sta su Firebase in clienti/{codice}: il cliente la crea all'iscrizione e la legge; le spese le scrive il Magazzino.
    I clienti di prova (dati finti) restano nel pannello di prova e non toccano Firebase. */
 'use strict';
-const VERSIONE = '0.3.0';
+const VERSIONE = '0.4.0';
 const R = Punti.REGOLE;
 const CHIAVE = 'lss-per-te';
 const $ = (s, el = document) => el.querySelector(s);
@@ -72,7 +72,8 @@ const IC = {
   condividi: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/>',
   spunta: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   campana: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
-  buono: '<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6"/>'
+  buono: '<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6"/>',
+  etichetta: '<path d="M3 12.5V4.5a1.5 1.5 0 0 1 1.5-1.5h8l8.5 8.5-9.5 9.5z"/><circle cx="8" cy="8" r="1.6"/>'
 };
 const icona = (n, colore) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="${colore || 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${colore ? ` style="stroke:${colore}"` : ''}>${IC[n]}</svg>`;
 
@@ -181,6 +182,7 @@ const VISTE = {
           <div class="tacche" role="img" aria-label="${m.nelBarattolo} punti su ${R.sogliaBuono}">${tacche}</div>
           <div class="mano" aria-hidden="true">${fraseBarattolo(m.nelBarattolo)}</div></div>
       </section>
+      ${strisciaPromo()}
       <div class="carta riga-icona"><span class="riquadro" style="background:var(--cotto)">${icona('buono')}</span><span style="display:flex;flex-direction:column;gap:1px"><span class="etichetta" style="color:var(--cotto)">Il premio</span><span class="premio-titolo">Un buono da 5 € ogni ${R.sogliaBuono} punti</span><span class="nota">Su una spesa di almeno 40 €. Il 1° del mese i punti ripartono da zero.</span></span></div>
       <section class="carta come" aria-label="Come guadagni punti"><div class="etichetta" style="padding-bottom:2px">Punti per ogni euro</div>
         <div class="voce"><span class="ic" style="background:#2F241E14">${icona('cesto', '#2F241E')}</span><span class="testo">Tutti i prodotti<small>Pasta, formaggi, sfuso e il resto della spesa</small></span><span class="val">1</span></div>
@@ -209,7 +211,7 @@ const VISTE = {
       return `<div class="carta missione${mi.completa ? ' fatta' : ''}">
         <span class="ic" style="background:${mi.completa ? '#255633' : col + '17'}">${mi.completa ? icona('spunta', '#FFFFFF') : icona(ic, col)}</span>
         <div class="corpo"><div class="top"><span class="nome">${esc(mi.titolo)}</span><span class="valore">+${mi.punti}</span></div>
-        <div class="desc">${esc(mi.testo)}</div>
+        <div class="desc">${esc(mi.testo)}</div>${(() => { const vt = vetrinaAttiva(), x = vt && (vt.missioni || []).find(y => y.tipo === mi.id); return x && x.prodotti.length ? `<div class="desc"><b>${mi.id === 'settimana' ? 'Questa settimana' : mi.id === 'dolce' ? 'Questo mese' : 'Vale per'}:</b> ${esc(x.prodotti.map(p => p.nome).join(', '))}</div>` : ''; })()}
         <div class="avanz"${!mi.completa && quasi[mi.id] && mi.serve - mi.fatto === 1 ? ' style="padding-right:130px"' : ''}><span class="bar"><span style="width:${perc}%;background:${mi.completa ? '#255633' : col}"></span></span><span class="conta">${mi.completa ? 'Fatta' : `${mi.fatto} di ${mi.serve}${unita[mi.id] ? ' ' + unita[mi.id] : ''}`}</span></div></div>
         ${!mi.completa && quasi[mi.id] && mi.serve - mi.fatto === 1 ? `<span class="mano" aria-hidden="true">${quasi[mi.id]}</span>` : ''}</div>`;
     }).join('');
@@ -289,8 +291,90 @@ const VISTE = {
   }
 };
 
+/* ---------- vetrina: Promozioni (dalla 0.4.0) ----------
+   La pubblica il Magazzino in vetrina/oggi; le foto stanno in vetrinaFoto/{id} e si tengono sul telefono (Cache Storage). */
+async function leggiVetrina() {
+  const d = await chiamaFs('/vetrina/oggi');
+  return d ? daFsObj(d.fields) : null;
+}
+const vetrinaAttiva = () => stato.scenario ? Prova.vetrinaProva(oggi()) : (stato.vetrina && stato.vetrina.dati) || null;
+const FOTO = new Map();
+async function caricaFoto(id, ts) {
+  const k = id + '@' + ts;
+  if (FOTO.has(k)) return FOTO.get(k);
+  let url = null;
+  try {
+    const c = 'caches' in window ? await caches.open('per-te-foto') : null, chiave = new Request('/foto/' + encodeURIComponent(id) + '/' + ts);
+    const hit = c && await c.match(chiave);
+    if (hit) url = await hit.text();
+    else {
+      const d = await chiamaFs('/vetrinaFoto/' + encodeURIComponent(id));
+      url = d ? daFsObj(d.fields).dataUrl || null : null;
+      if (url && c) await c.put(chiave, new Response(url));
+    }
+  } catch (e) { url = null; }
+  FOTO.set(k, url);
+  return url;
+}
+/* dopo il disegno: le foto arrivano e si mettono al loro posto */
+function mostraFoto() {
+  document.querySelectorAll('[data-foto]').forEach(async el => {
+    const url = await caricaFoto(el.dataset.foto, el.dataset.ts);
+    if (url && el.isConnected) { el.innerHTML = `<img src="${url}" alt="" loading="lazy">`; el.classList.add('con-foto'); }
+  });
+}
+const GRUPPI = {
+  ultimi: { titolo: 'Ultimi giorni', ppe: 4, colore: '#8A5A00', ic: 'orologio' },
+  salvali: { titolo: '«Salvali tu»', ppe: 3, colore: '#255633', ic: 'barattolo' },
+  bottega: { titolo: 'Fatto in bottega', ppe: 2, colore: '#B4502A', ic: 'pane' }
+};
+const prezzoVoce = v => v.prezzoCent == null ? '' : euro(v.prezzoCent) + (v.unita === 'kg' ? '/kg' : v.unita === 'l' ? '/l' : '');
+const quando = g => g == null ? '' : g === 0 ? 'scade oggi' : g === 1 ? 'scade domani' : `scade tra ${g} giorni`;
+function fotoVoce(v, col, ic, cls = '') {
+  return `<span class="pv-foto ${cls}" style="background:${col}1A"${v.foto ? ` data-foto="${esc(v.id)}" data-ts="${esc(v.foto)}"` : ''}>${icona(ic, col)}</span>`;
+}
+/* tutte le voci, nell'ordine delle pubblicità: missioni, poi ×4, ×3, ×2 */
+function vociPromo(vt) {
+  const out = [];
+  for (const mi of vt.missioni || []) {
+    if (mi.tipo === 'pane') continue;
+    for (const p of mi.prodotti || []) out.push({ ...p, badge: '+' + mi.punti, etichetta: mi.tipo === 'settimana' ? 'Prodotto della settimana' : 'Dolce del mese', col: '#E9A93A', ic: mi.tipo === 'settimana' ? 'bandiera' : 'dolce' });
+  }
+  for (const k of ['ultimi', 'salvali', 'bottega']) for (const p of vt[k] || []) out.push({ ...p, badge: '×' + GRUPPI[k].ppe, etichetta: k === 'bottega' ? 'Fatto in bottega' : quando(p.giorni), col: GRUPPI[k].colore, ic: GRUPPI[k].ic });
+  return out;
+}
+function strisciaPromo() {
+  const vt = vetrinaAttiva(); if (!vt) return '';
+  const voci = vociPromo(vt).slice(0, 10); if (!voci.length) return '';
+  return `<section class="striscia" aria-label="Promozioni">
+    <div class="striscia-top"><h2>Promozioni</h2><a href="#promozioni">Vedi tutte</a></div>
+    <div class="striscia-scorri">${voci.map(v => `<a class="promo-card" href="#promozioni">
+      ${fotoVoce(v, v.col, v.ic, 'grande')}<span class="pc-badge" style="background:${v.col}">${esc(v.badge)}</span>
+      <span class="pc-et">${esc(v.etichetta)}</span><span class="pc-nome">${esc(v.nome)}</span><span class="pc-prezzo">${esc(prezzoVoce(v))}</span></a>`).join('')}</div>
+    <div class="nota">Punti in più per ogni euro. Fino a esaurimento.</div></section>`;
+}
+VISTE.promozioni = function () {
+  const { m } = situazione(), vt = vetrinaAttiva();
+  if (!vt) return `<main tabindex="-1">${testata(m)}<div><h1 class="titolo">Promozioni</h1><div class="sotto">La vetrina del negozio non è ancora arrivata: serve internet.</div></div></main>`;
+  const riga = (v, k) => `<div class="pv-riga">${fotoVoce(v, GRUPPI[k].colore, GRUPPI[k].ic)}<div class="pv-testo"><b>${esc(v.nome)}</b><span>${esc(k === 'bottega' ? 'Fatto da noi' : quando(v.giorni))} <span class="pv-badge" style="background:${GRUPPI[k].colore}1F;color:${GRUPPI[k].colore}">×${GRUPPI[k].ppe}</span></span></div><span class="pv-prezzo">${esc(prezzoVoce(v))}</span></div>`;
+  const gruppo = k => (vt[k] || []).length ? `<section class="carta pv-gruppo"><h2>${GRUPPI[k].titolo} <span>· ${GRUPPI[k].ppe} punti per euro</span></h2>${vt[k].map(v => riga(v, k)).join('')}</section>` : '';
+  const missioni = (vt.missioni || []).map(mi => {
+    if (mi.tipo === 'pane') return `<section class="carta pv-gruppo"><h2>${esc(mi.titolo)} <span class="pv-badge forte">+${mi.punti}</span></h2><div class="nota" style="padding-bottom:4px">${esc(mi.testo)}</div>${mi.prodotti.map(v => `<div class="pv-riga">${fotoVoce(v, '#B4502A', 'pane')}<div class="pv-testo"><b>${esc(v.nome)}</b><span>Fatto da noi</span></div><span class="pv-prezzo">${esc(prezzoVoce(v))}</span></div>`).join('')}</section>`;
+    const v = mi.prodotti[0];
+    return `<section class="carta pv-vetrina">${fotoVoce(v, '#E9A93A', mi.tipo === 'settimana' ? 'bandiera' : 'dolce', 'vetrina')}<div class="pv-testo"><span class="etichetta" style="color:#8A5A00">${mi.tipo === 'settimana' ? 'Prodotto della settimana' : 'Dolce del mese'}</span><b class="pv-grande">${esc(v.nome)}</b><span>${esc(mi.testo)}${v.giorni != null && v.giorni <= 30 ? ' · ' + quando(v.giorni) : ''}</span><span class="pv-prezzo">${esc(prezzoVoce(v))}</span></div><span class="pv-badge forte angolo">+${mi.punti}</span></section>`;
+  }).join('');
+  const vuota = !(vt.missioni || []).length && !['ultimi', 'salvali', 'bottega'].some(k => (vt[k] || []).length);
+  const agg = vt.aggiornato ? new Date(vt.aggiornato) : null;
+  return `<main tabindex="-1">${testata(m)}
+    <div><h1 class="titolo">Promozioni</h1><div class="sotto">Prodotti che oggi danno punti in più, per ogni euro o con le missioni del mese. Fino a esaurimento.</div></div>
+    ${vuota ? '<div class="carta pannello"><div class="nota">Oggi non ci sono promozioni.</div></div>' : ''}
+    ${missioni}${gruppo('ultimi')}${gruppo('salvali')}${gruppo('bottega')}
+    <div class="pv-piede"><span class="nota">${stato.scenario ? 'Vetrina di prova, con dati finti.' : agg ? `Aggiornata il ${dataLunga(vt.giorno || oggi())} alle ${oraBreve(agg.getTime())}.` : ''}</span><span class="mano" aria-hidden="true">o chiedili al banco!</span></div>
+  </main>`;
+};
+
 /* ---------- navigazione ---------- */
-const CON_CLIENTE = ['per-te', 'missioni', 'tessera', 'buono'];
+const CON_CLIENTE = ['per-te', 'promozioni', 'missioni', 'tessera', 'buono'];
 function vista() {
   const c = clienteAttivo();
   let v = location.hash.slice(1) || (c ? 'per-te' : 'benvenuto');
@@ -302,15 +386,16 @@ function vista() {
 function disegna(cambioPagina = true) {
   const v = vista();
   $('#vista').innerHTML = VISTE[v]();
-  const tab = { 'per-te': 'per-te', buono: 'per-te', missioni: 'missioni', tessera: 'tessera' }[v];
+  const tab = { 'per-te': 'per-te', buono: 'per-te', promozioni: 'promozioni', missioni: 'missioni', tessera: 'tessera' }[v];
   $('#tabbar').hidden = !clienteAttivo() || !tab;
   document.querySelectorAll('#tabbar a').forEach(a => { if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  document.title = { benvenuto: 'Benvenuto', amica: 'Codice di un’amica', recupero: 'Ho già la tessera', 'per-te': 'Il tuo barattolo', missioni: 'Missioni', tessera: 'La tua tessera', buono: 'I tuoi buoni', prova: 'Prova' }[v] + ' – La Spesa Sfusa per te';
+  document.title = { benvenuto: 'Benvenuto', amica: 'Codice di un’amica', recupero: 'Ho già la tessera', 'per-te': 'Il tuo barattolo', promozioni: 'Promozioni', missioni: 'Missioni', tessera: 'La tua tessera', buono: 'I tuoi buoni', prova: 'Prova' }[v] + ' – La Spesa Sfusa per te';
   const ca = clienteAttivo();
   if (ca) {
     $('#stampa').innerHTML = [0, 1].map(() => `<div class="tessera-stampa"><div class="qr">${Codici.svgQR(ca.codice, { lato: 3 })}</div><div class="dx"><div class="marchio"><b>La Spesa Sfusa</b><i>per te</i></div><div class="barre">${Codici.svg128(ca.codice)}</div><div class="codice">${esc(Codici.leggibile(ca.codice))}</div><small>Falla vedere in cassa, prima di pagare. Via Lazio 66, Montegranaro</small></div></div>`).join('');
   }
   if (cambioPagina) { window.scrollTo(0, 0); const main = $('#vista main'); if (main) main.focus({ preventScroll: true }); }
+  mostraFoto();
 }
 window.addEventListener('hashchange', () => disegna());
 
@@ -342,6 +427,7 @@ async function aggiorna() {
   try {
     if (!stato.mio.inviata) await inviaIscrizione();
     const s = await leggiScheda(stato.mio.codice);
+    try { const vt = await leggiVetrina(); stato.vetrina = { dati: vt, letta: Date.now() }; } catch (e) { /* la vetrina resta l'ultima letta */ }
     if (s && stato.mio && stato.mio.codice === s.codice) {
       Object.assign(stato.mio, { codiceAmica: s.codiceAmica || stato.mio.codiceAmica, iscrittoIl: s.iscrittoIl || stato.mio.iscrittoIl, invitatoDa: s.invitatoDa, amiche: s.amiche, spese: s.spese, aggiornato: Date.now(), errore: null });
       salva();

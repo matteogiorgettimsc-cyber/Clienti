@@ -29,5 +29,13 @@ service cloud.firestore {
         allow read: if codice.matches('LSS[A-Z0-9]{8}');
       }
     }
+
+    // LA VETRINA (Promozioni) e le foto dei prodotti: le scrive il Magazzino, le leggono tutti, una alla volta
+    match /vetrina/{doc} {
+      allow get: if true;
+    }
+    match /vetrinaFoto/{prodotto} {
+      allow get: if true;
+    }
   }
 }

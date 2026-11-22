@@ -27,7 +27,7 @@ button { font: inherit; color: inherit; }
 main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 24px; outline: none; }
 .barra-prova { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 6px 12px; background: #2B4C9B; color: #FFFFFF; font-size: 12.5px; font-weight: 600; text-decoration: none; text-align: center; }
 .barra-prova u { text-underline-offset: 2px; }
-.tabbar { position: sticky; bottom: 0; z-index: 5; flex: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; max-width: 480px; margin: 0 auto; background: #FFFFFF; border-top: 1px solid #2F241E1A; padding-bottom: env(safe-area-inset-bottom); }
+.tabbar { position: sticky; bottom: 0; z-index: 5; flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; max-width: 480px; margin: 0 auto; background: #FFFFFF; border-top: 1px solid #2F241E1A; padding-bottom: env(safe-area-inset-bottom); }
 .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 64px; text-decoration: none; color: var(--tenue); font-size: 11.5px; font-weight: 500; }
 .tabbar a svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .tabbar a[aria-current="page"] { color: var(--verde); font-weight: 600; }
@@ -184,6 +184,43 @@ dialog::backdrop { background: #2F241E66; }
 dialog h2 { margin: 0 0 8px; font-family: var(--serif); font-size: 22px; }
 dialog ol { margin: 8px 0 14px; padding-left: 20px; line-height: 1.5; font-size: 14.5px; }
 #avvisino { position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); background: var(--inchiostro); color: #FFFFFF; padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 20; max-width: calc(100% - 40px); }
+
+/* ---------- promozioni (dalla 0.4.0) ---------- */
+.striscia { display: flex; flex-direction: column; gap: 8px; }
+.striscia-top { display: flex; justify-content: space-between; align-items: baseline; }
+.striscia-top h2 { margin: 0; font-family: var(--serif); font-size: 20px; }
+.striscia-top a { font-weight: 600; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; }
+.striscia-scorri { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 2px 8px; margin: 0 -20px; padding-left: 20px; padding-right: 20px; scrollbar-width: none; }
+.striscia-scorri::-webkit-scrollbar { display: none; }
+.striscia-scorri { scroll-padding: 0 20px; }
+.promo-card { position: relative; flex: none; width: 148px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 3px; padding: 8px 8px 10px; background: #FFFFFF; border-radius: 16px; box-shadow: var(--ombra); text-decoration: none; color: inherit; }
+.pv-foto { flex: none; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.pv-foto svg { width: 24px; height: 24px; }
+.pv-foto.grande { width: 100%; height: 104px; }
+.pv-foto.grande svg { width: 36px; height: 36px; }
+.pv-foto.vetrina { width: 96px; height: 96px; border-radius: 14px; }
+.pv-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pc-badge { position: absolute; top: 12px; right: 12px; font-family: var(--serif); font-weight: 700; font-size: 14px; padding: 2px 9px; border-radius: 999px; color: #FFFFFF; }
+.pc-et { font-size: 11.5px; color: var(--tenue); margin-top: 3px; }
+.pc-nome { font-weight: 600; font-size: 14px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 34px; }
+.pc-prezzo, .pv-prezzo { font-family: var(--serif); font-weight: 700; font-size: 16px; }
+.pv-gruppo { padding: 10px 14px 4px; }
+.pv-gruppo h2 { margin: 2px 0 6px; font-family: var(--serif); font-size: 18px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pv-gruppo h2 span { font-family: var(--sans); font-size: 13px; font-weight: 500; color: var(--tenue); }
+.pv-riga { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid #2F241E14; }
+.pv-riga:first-of-type { border-top: 0; }
+.pv-testo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pv-testo b { font-weight: 600; font-size: 14.5px; line-height: 1.25; }
+.pv-testo > span { font-size: 12.5px; color: var(--tenue); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pv-badge { font-family: var(--serif); font-weight: 700; font-size: 12px; padding: 2px 9px; border-radius: 999px; }
+.pv-badge.forte { font-size: 15px; padding: 3px 10px; background: var(--ambra); color: #3B2600; }
+.pv-badge.angolo { position: absolute; top: 12px; right: 12px; }
+.pv-vetrina { position: relative; display: flex; gap: 14px; padding: 14px; border-radius: 20px; }
+.pv-testo > span.pv-prezzo { font-size: 17px; color: var(--inchiostro); margin-top: 2px; }
+.pv-vetrina .etichetta { padding-right: 56px; }
+.pv-grande { font-family: var(--serif); font-weight: 700 !important; font-size: 20px !important; line-height: 1.05; }
+.pv-piede { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pv-piede .mano { font-size: 22px; transform: rotate(-3deg); }
 
 /* ---------- stampa della tessera: formato carta di credito, due copie ---------- */
 #stampa { display: none; }
